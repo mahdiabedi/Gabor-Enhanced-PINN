@@ -3,7 +3,7 @@
 
 This repository contains the implementation of **Gabor-Enhanced Physics-Informed Neural Networks (PINNs)** for solving the Helmholtz equation efficiently, as presented in the paper:  
 
-> **"Gabor-Enhanced Physics-Informed Neural Networks for Fast Simulations of Acoustic Wavefields"**  
+> ["Gabor-Enhanced Physics-Informed Neural Networks for Fast Simulations of Acoustic Wavefields"](https://arxiv.org/abs/2502.17134)   
 
 ## **Overview**  
 
