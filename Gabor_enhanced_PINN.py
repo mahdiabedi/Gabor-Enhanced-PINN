@@ -9,20 +9,24 @@ This code produces the results in the paper titled
 "Gabor-Enhanced Physics-Informed Neural Networks for Fast Simulations of Acoustic Wavefields"
 By M.M. Abedi, D. Pardo, T. Alkhalifah
 
+This includes the main training loop
 """
 
 import tensorflow as tf
 import numpy as np
 import time as time
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import keras
-import scipy.io
-from My_utilities import compute_U0,interpolator,save_model_and_history,sin_activation,create_xz_reg
+# import scipy.io
+from My_utilities_Gabor import load_training_and_validation_data,compute_U0,save_model_and_history,sin_activation,create_xz_reg
+from My_CustomLayers import CustomLayer3D,EmbedderLayer,GaborFunctionLayer
 
 dtype="float32"
 tf.keras.backend.set_floatx(dtype)
 
-# Example input parameters 
+
+
+# User-defined input parameters 
 frequency =10        # Frequency in Hz 
 neurons = 64 # Number of neurons in the hidden layers
 neurons_final = 64  # Number of neurons in penultimate layer 
@@ -31,7 +35,7 @@ learning_rate=0.001
 num_epochs=100000
 
 model_type='Gabor'#'PINN','Gabor'
-velocity_model='simple'#'simple','overthrust','marmousi'
+velocity_model='marmousi'#'simple','overthrust','marmousi'
 
 use_source_reg=True
 use_lr_decay=True
@@ -40,20 +44,61 @@ use_PML=False
 beta=200# Regularization parameter for soft constraint
 seed=1234
 
-activation_penultima = 'sigmoid'
-if model_type=='PINN':
-    activation_penultima=sin_activation
-# Define the spatial domain boundaries (a, b) for x and z
-if velocity_model=='simple':
-    a_x, b_x = 0., 2.5  # Bounds for x
-    a_z, b_z = 0., 2.5 # Bounds for z
-    if frequency==10:
-        npts_x = 51 # Number of points along x-axis 501,201
-        npts_z = 51  # Number of points along z-axis 161, 201
 
-domain_bounds=a_x,b_x,a_z,b_z
-    
+# Define the number of collocation points per epoch
+if velocity_model=='overthrust':
+    if frequency==10:
+        npts_x = 501 # Number of points along x-axis 501,201
+        npts_z = 161  # Number of points along z-axis 161, 201
+elif velocity_model=='simple':
+    if frequency==4:
+        npts_x = 71 # Number of points along x-axis 71 in Gabor paper
+        npts_z = 71  # Number of points along z-axis 71
+    if frequency==10:
+        npts_x = 51 # Number of points along x-axis 51 in Gabor paper
+        npts_z = 51  # Number of points along z-axis 51
+    elif frequency==20:
+        npts_x = 201 # Number of points along x-axis  301
+        npts_z = 201  # Number of points along z-axis 
+elif velocity_model=='marmousi':
+    if frequency==10:
+        npts_x = 151 # Number of points along x-axis = 151
+        npts_z = 101  # Number of points along z-axis 101
+        
+#Validation collocation points:
+npts_x_val=npts_x-1#500
+npts_z_val=npts_z-1#160
+if velocity_model=='simple' and frequency==10:
+    npts_x_val=200
+    npts_z_val=200
+if velocity_model=='simple' and frequency==4:
+    npts_x_val=100
+    npts_z_val=100
+
+#%% Load the validation adata and traning collocation points 
+data = load_training_and_validation_data(
+    frequency=frequency,
+    velocity_model=velocity_model,
+    dtype=dtype,
+    use_PML=use_PML
+)
+
+# Unpack with original variable names
+
+dU_2d         = data['dU_2d']
+xz_val        = data['xz_val']
+s_xz          = data['s_xz']
+factor        = data['factor']
+v0            = data['v0']
+v_val         = data['v_val']
+v_all         = data['v_all']
+xz_all        = data['xz_all']
+domain_bounds = data['domain_bounds'] 
+a_x,b_x,a_z,b_z=domain_bounds
+domain_bounds_valid=domain_bounds
+
 omega = np.float32(frequency*2*np.pi)  # Angular frequency
+
 if use_PML:
     L_PML=0.5
     omega0=omega
@@ -65,59 +110,15 @@ if use_PML:
 
 npts=npts_z*npts_x#number of colocation points in each epoch
 
-#%% finding the v values on collocation points
-#loading the validation finite-difference result and coordinates
-if velocity_model=='overthrust':
-    mat_data = scipy.io.loadmat(f'FD_results_{frequency}Hz_val_OVE_velocity_v0corrected.mat')#Hz_val_velocity, Hz_val_OVE_velocity
-elif velocity_model=='simple':
-    mat_data = scipy.io.loadmat(f'FD_results_{frequency}Hz_val_velocity.mat')#Hz_val_velocity, Hz_val_OVE_velocity
-elif velocity_model=='marmousi':
-    mat_data = scipy.io.loadmat(f'FD_results_{frequency}Hz_val_velocity_marmousi.mat')
-    
-val_keys = list(mat_data.keys())
-U0_analytic=mat_data['U0_analytic']
-U0_fd=mat_data['U0_2d']
-dU_2d=mat_data['dU_2d']
-xz_val=tf.reshape(mat_data['xz_val'],(-1,2))
-
-s_x=np.float32(np.squeeze(mat_data['s_x']))
-s_z=np.float32(np.squeeze(mat_data['s_z']))
-s_xz=tf.cast(tf.stack([s_x,s_z],axis=0),dtype=dtype)
-factor=np.float32(tf.squeeze(mat_data['factor']))
-U0_analytic=tf.concat([tf.reshape(tf.math.real(U0_analytic),(-1, 1)),tf.reshape(tf.math.imag(U0_analytic),(-1, 1))], axis=1)
-dU_2d_r=interpolator(np.real(dU_2d),domain_bounds,xz_val,dtype=tf.float32) 
-dU_2d_i=interpolator(np.imag(dU_2d),domain_bounds,xz_val,dtype=tf.float32)
-dU_2d=tf.concat([tf.reshape(dU_2d_r,(-1, 1)),tf.reshape(dU_2d_i,(-1, 1))], axis=1)
-
-v0=np.float32(np.squeeze(mat_data['v0']))
-
-v_val=mat_data['v_val']
-[npts_z_val,npts_x_val]=np.shape(v_val)
-v_val=tf.reshape(v_val,(-1,1))
-
-plt.figure(figsize=(10, 6))
-plt.scatter(xz_val[:, 0], xz_val[:, 1], c=dU_2d[:,0], cmap='seismic', s=10) 
-plt.colorbar()
-#%% loading training data for random colocation points:
-
-if velocity_model=='simple':
-    if not use_PML:
-        mat_data = scipy.io.loadmat('Simple_random_training.mat')
-        v_all=mat_data['v_all']
-        xz_all=mat_data['xz_all']
-    if use_PML:
-        print('PML')
-        mat_data = scipy.io.loadmat('Simple_random_training_PML.mat')
-        v_all=mat_data['v_all']
-        xz_all=mat_data['xz_all']
-   
 n_all=xz_all.shape[0]
 
 random_indices = np.random.choice(n_all, npts, replace=False)
 xz_train = tf.gather(xz_all, random_indices)  # Gather corresponding indices
 v_train = tf.gather(v_all, random_indices)  # Gather corresponding indices
 
-
+activation_penultima = 'sigmoid'
+if model_type=='PINN':
+    activation_penultima=sin_activation
 #%%Model buildng
 def make_u_model(neurons, activation=tf.math.sin, activation_penultima=tf.math.sin, neurons_final=None, dtype=tf.float32, trainableLastLayer=False,v0=1., omega=1. ,model_type='PINN',seed=1234):
     # Xavier (Glorot) initialization is commonly used for PINNs
@@ -132,7 +133,7 @@ def make_u_model(neurons, activation=tf.math.sin, activation_penultima=tf.math.s
     l0 =keras.layers.Input(shape=(2,), name="x_input", dtype=dtype)
     
     # Apply the embedding layer
-    l1 = EmbedderLayer(name="embedder",domain_bounds = domain_bounds )(l0)
+    l1 = EmbedderLayer(name="embedder",K = 4)(l0)
     
     # First dense layer 
     l1 =keras.layers.Dense(neurons, activation=activation, dtype=dtype,
@@ -181,132 +182,6 @@ def make_u_model(neurons, activation=tf.math.sin, activation_penultima=tf.math.s
     u_model =keras.Model(inputs=l0, outputs=output)
     
     return u_model, u_bases
-
-
-class CustomLayer3D(keras.layers.Layer):
-    # This layer has a weight matrix with shape [neurons_final, 1, 2], where 2 represents the real and imaginary parts
-    # No bias
-    def __init__(self, neurons_final, dtype=tf.float32, trainable=True,seed=1238, **kwargs):
-        super(CustomLayer3D, self).__init__(**kwargs)
-        self.dtype_ = dtype
-        self.trainable_ = trainable
-        self.neurons_final = neurons_final
-        self.seed=seed
-
-    def build(self, input_shape):
-        # Initialize kernel weights here using GlorotNormal
-        self.kernel = self.add_weight(shape=(2,self.neurons_final, 1), 
-                                      initializer=keras.initializers.GlorotNormal(seed=self.seed), 
-                                      trainable=self.trainable_)
-    def call(self, inputs):
-        # Perform the einsum operation
-        output = tf.einsum('jbi,jik->bjk', inputs, self.kernel)
-        # Remove the 2nd dimension to achieve the desired output shape (batch_size, 2)
-        output = tf.squeeze(output, axis=2)
-        return output
-    def get_config(self):
-        config = super(CustomLayer3D, self).get_config()
-        config.update({
-            "neurons_final": self.neurons_final,
-            "dtype": self.dtype_,
-            "trainable": self.trainable_
-        })
-        return config
-
-    
-class GaborFunctionLayer(keras.layers.Layer):
-    def __init__(self, neurons, v, omega, dtype=tf.float32, **kwargs):
-        super(GaborFunctionLayer, self).__init__(**kwargs)
-        self.neurons = neurons  # Number of neurons
-        self.v0 = v  # Fixed input parameter for velocity
-        self.omega = omega  # Fixed input parameter for angular frequency
-        self.dtype_ = dtype
-        
-        ##final traible:
-        theta_init = tf.ones(self.neurons)*(-np.pi /4)
-        self.theta = self.add_weight(
-            shape=(self.neurons,), 
-            initializer=keras.initializers.Constant(theta_init), 
-            trainable=True, 
-            dtype=self.dtype_, 
-            name="theta")  # Rotation angle
-
-        trainable_v_init = tf.linspace(self.v0, self.v0, self.neurons)
-        self.trainable_v = self.add_weight(
-            shape=(self.neurons,), 
-            initializer=keras.initializers.Constant(trainable_v_init), 
-            trainable=True, 
-            dtype=self.dtype_, 
-            name="trainable_v")  # v
-        #NON-trainable:
-        self.delta = tf.cast(10,self.dtype_)
-
-    # @tf.function     
-    def call(self, inputs):
-        #fixed velocity in Gabor:
-        d_input = inputs
-        v_function = tf.cast(self.trainable_v,self.dtype_)
-        d=d_input
-
-        # Split inputs into dx and dz components
-        d_split = tf.split(d, num_or_size_splits=2, axis=-1)  # Split into two parts
-        dx = d_split[0]  # Shape: [batch_size, neurons]
-        dz = d_split[1]  # Shape: [batch_size, neurons]
-
-        # Compute transformed coordinates x_theta' and z_theta' for the Gabor function
-        x_theta = dx * tf.cos(self.theta) + dz * tf.sin(self.theta)
-        z_theta = -dx * tf.sin(self.theta) + dz * tf.cos(self.theta)
-
-        # Compute D = (x_theta')^2 + (z_theta')^2
-        D = tf.square(x_theta) + tf.square(z_theta)
-
-        # # # Compute G_real and G_imag based on the Gabor function equations
-        G_real =  tf.expand_dims(tf.cos(self.omega /v_function * x_theta) * tf.exp(-0.5 * D * tf.square(self.delta)), axis=0)
-        G_imag =  tf.expand_dims(tf.sin(self.omega /v_function * x_theta) * tf.exp(-0.5 * D * tf.square(self.delta)), axis=0)
-
-        G = tf.concat([G_real, G_imag], axis=0)
-
-        return G
-    def get_config(self):
-        config = super(GaborFunctionLayer, self).get_config()
-        config.update({
-            "neurons": self.neurons,
-            "v": self.v0,
-            "omega": self.omega,
-            "dtype": self.dtype_
-        })
-        return config
-
-
-# ###### simple!!!
-class EmbedderLayer(tf.keras.layers.Layer):#The old embedder
-    def __init__(self, domain_bounds, **kwargs):
-        super(EmbedderLayer, self).__init__(**kwargs)
-        self.domain_bounds = domain_bounds  # Store domain bounds for normalization
-
-    @tf.function()
-    def call(self, inputs):
-
-        input1 =  (inputs)
-        input2 = tf.math.multiply(input1 , 2.0)
-        input4 = tf.math.multiply(input1 , 4.0)
-        input8 = tf.math.multiply(input1 , 8.0)
-
-        input_all = tf.concat([input1, input2, input4, input8], axis=1)
-
-        # Apply sine and cosine functions
-        sin_embed = tf.sin(input_all)
-        cos_embed = tf.cos(input_all)
-
-        # Concatenate original input, sine, and cosine embeddings
-        output = tf.concat([inputs, sin_embed, cos_embed], axis=1)
-        return output
-    def get_config(self):
-        config = super(EmbedderLayer, self).get_config()
-        config.update({"domain_bounds": self.domain_bounds})
-        return config
- 
-
 
 
 # Define the loss function for the 2D Helmholtz equation (separating real and imaginary parts)
@@ -542,8 +417,8 @@ u_model, u_bases = make_u_model(neurons,neurons_final=neurons_final,activation=a
 u_model.compile(optimizer=optimizer,loss = make_loss)
 u_model.summary()
 
-#%% training
-#!!! 
+#%% TRAINING LOOP <<<<<<<<<<<<<<<<<<<
+#!!!!
 # Start the timer
 start_time = time.time()
 epoch_time=start_time
@@ -558,7 +433,7 @@ U0_all = compute_U0(xz_all, s_xz, v0, omega,factor)#calculate when chaning the c
 U0_val = compute_U0(xz_val, s_xz, v0, omega,factor)
 
 source_reg_val=create_xz_reg(xz_val, s_xz,omega, v0,beta)
-_,_,indices_around_source=create_xz_reg(xz_all,s_xz,omega, v0,beta,num_reg_points=npts//100)#adding 1 percent of the all collocation points around the shource for stability
+_,_,indices_around_source=create_xz_reg(xz_all,s_xz,omega, v0,beta,num_reg_points=npts//100)#adding 1 percent of the all collocation points around the source for stability
 
 #training loop:
 for epoch in range(num_epochs):
