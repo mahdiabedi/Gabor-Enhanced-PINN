@@ -42,14 +42,14 @@ The implementation supports training and validation using various benchmark mode
 - `Inference_Plotting.py`  
   Utility script to load pretrained models and plot velocity profiles, reference wavefields, and model predictions for easy comparison.
 
-##Usage
+## Usage
 
-Use Gabor_enhanced_PINN.py to train on your chosen velocity model. You can specify training settings within the script.
+- Use Gabor_enhanced_PINN.py to train on your chosen velocity model. You can specify training settings within the script.
 
-Use Inference_Plotting.py to:
-Load a pretrained model (either Gabor-PINN or standard PINN)
-Visualize the corresponding velocity model
-Compare the predicted wavefield to the reference finite-difference solution
+- Use Inference_Plotting.py to:
+- Load a pretrained model (either Gabor-PINN or standard PINN)
+- Visualize the corresponding velocity model
+- Compare the predicted wavefield to the reference finite-difference solution
 
 ---
 
