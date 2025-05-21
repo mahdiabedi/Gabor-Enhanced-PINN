@@ -104,7 +104,7 @@ plt.rcParams.update({
     "text.latex.preamble": r"\usepackage{amsmath}"  # Use amsmath for better LaTeX rendering
 })
 
-# # # ###### OLD!!! COMMENT if trained using the not using Gabor_enhanced_PINN.py and NOT the models in the PreTrained_Models folder
+# # # ###### OLD!!! COMMENT if trained using Gabor_enhanced_PINN.py and NOT using the models in the PreTrained_Models folder
 class EmbedderLayer(tf.keras.layers.Layer):#The old embedder
     def __init__(self, domain_bounds, **kwargs):
         super(EmbedderLayer, self).__init__(**kwargs)
