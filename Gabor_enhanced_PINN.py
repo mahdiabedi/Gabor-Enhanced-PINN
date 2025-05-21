@@ -9,15 +9,14 @@ This code produces the results in the paper titled
 "Gabor-Enhanced Physics-Informed Neural Networks for Fast Simulations of Acoustic Wavefields"
 By M.M. Abedi, D. Pardo, T. Alkhalifah
 
-This includes the main training loop
+This code includes the main training loop
 """
 
 import tensorflow as tf
 import numpy as np
 import time as time
-# import matplotlib.pyplot as plt
 import keras
-# import scipy.io
+import os
 from My_utilities_Gabor import load_training_and_validation_data,compute_U0,save_model_and_history,sin_activation,create_xz_reg
 from My_CustomLayers import CustomLayer3D,EmbedderLayer,GaborFunctionLayer
 
@@ -74,6 +73,9 @@ if velocity_model=='simple' and frequency==10:
 if velocity_model=='simple' and frequency==4:
     npts_x_val=100
     npts_z_val=100
+    
+#Create a folder to save the modela dn the history:
+os.makedirs('Results/Models', exist_ok=True)
 
 #%% Load the validation adata and traning collocation points 
 data = load_training_and_validation_data(
