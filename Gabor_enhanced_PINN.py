@@ -74,10 +74,10 @@ if velocity_model=='simple' and frequency==4:
     npts_x_val=100
     npts_z_val=100
     
-#Create a folder to save the modela dn the history:
+#Create a folder to save the models and history:
 os.makedirs('Results/Models', exist_ok=True)
 
-#%% Load the validation adata and traning collocation points 
+#%% Load the validation data and training collocation points 
 data = load_training_and_validation_data(
     frequency=frequency,
     velocity_model=velocity_model,
