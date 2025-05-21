@@ -127,6 +127,71 @@ def load_training_and_validation_data(frequency, velocity_model, dtype=tf.float3
     }
 
 
+def load_validation_data(frequency, velocity_model, dtype=tf.float32, use_PML=False):
+    """
+    Load validation and training data for Helmholtz or PINN-based simulation.
+
+    Parameters:
+    - frequency (int): Frequency in Hz
+    - velocity_model (str): One of 'overthrust', 'simple', or 'marmousi'
+    - dtype (tf.DType): TensorFlow data type (default: tf.float32)
+    - use_PML (bool): Whether to use PML data for training
+
+    Returns:
+    - Dictionary with validation and training tensors
+    """
+    # Load validation data
+    if velocity_model == 'overthrust':
+        mat_data = scipy.io.loadmat(f'data/FD_results_{frequency}Hz_val_OVE_velocity_v0corrected.mat')
+        a_x, b_x = 0.0, 12.5  # Bounds for x
+        a_z, b_z = 0.0, 4 # Bounds for z
+    elif velocity_model == 'simple':
+        mat_data = scipy.io.loadmat(f'data/FD_results_{frequency}Hz_val_velocity.mat')
+        a_x, b_x = 0., 2.5  # Bounds for x
+        a_z, b_z = 0., 2.5 # Bounds for z
+    elif velocity_model == 'marmousi':
+        mat_data = scipy.io.loadmat(f'data/FD_results_{frequency}Hz_val_velocity_marmousi.mat')
+        a_x, b_x = 0., 3.  # Bounds for x
+        a_z, b_z = 0., 2. # Bounds for z
+    else:
+        raise ValueError(f"Unsupported velocity model: {velocity_model}")
+
+    domain_bounds=a_x,b_x,a_z,b_z
+
+    U0_analytic = tf.concat([
+        tf.reshape(tf.math.real(mat_data['U0_analytic']), (-1, 1)),
+        tf.reshape(tf.math.imag(mat_data['U0_analytic']), (-1, 1))
+    ], axis=1)
+
+    dU_2d_r = interpolator(np.real(mat_data['dU_2d']), domain_bounds, mat_data['xz_val'], dtype)
+    dU_2d_i = interpolator(np.imag(mat_data['dU_2d']), domain_bounds, mat_data['xz_val'], dtype)
+    dU_2d = tf.concat([dU_2d_r, dU_2d_i], axis=1)
+
+    xz_val = tf.reshape(mat_data['xz_val'], (-1, 2))
+    s_x = np.float32(np.squeeze(mat_data['s_x']))
+    s_z = np.float32(np.squeeze(mat_data['s_z']))
+    s_xz = tf.cast(tf.stack([s_x, s_z], axis=0), dtype=dtype)
+    factor = np.float32(np.squeeze(mat_data['factor']))
+    v0 = np.float32(np.squeeze(mat_data['v0']))
+
+    v_val = mat_data['v_val']
+    npts_z_val, npts_x_val = v_val.shape
+    v_val = tf.reshape(v_val, (-1, 1))
+
+    return {
+        'U0_analytic': U0_analytic,
+        'dU_2d': dU_2d,
+        'xz_val': xz_val,
+        's_xz': s_xz,
+        'factor': factor,
+        'v0': v0,
+        'v_val': tf.reshape(v_val, (-1, 1)),
+        'npts_z_val': npts_z_val,
+        'npts_x_val': npts_x_val,
+        'domain_bounds':domain_bounds
+    }
+
+
 # Define the background wavefield U0 in 2D
 def compute_U0(xz, s_xz, v0, omega,factor=1.):
     """
