@@ -4,7 +4,7 @@
 Created on Tue May 20 16:55:06 2025
 
 @author: mabedi
-This code loaded the validation data and Pre-trained models and plots:
+This code loads the validation data and Pre-trained models and plots:
     1. Velocity mode, 2. Real part of the Finite-difference simulation, 3. Real part of the Pretrained Model's prediction
 """
 
@@ -25,7 +25,7 @@ tf.keras.backend.set_floatx(dtype)
 frequency =10        # Frequency in Hz 
 epoch=100000
 model_type='Gabor'#'PINN','Gabor'
-velocity_model='marmousi'#'simple','overthrust','marmousi'
+velocity_model='overthrust'#'simple','overthrust','marmousi'
 use_PML=True
 
 PML = "PML" if use_PML else "NOPML"
