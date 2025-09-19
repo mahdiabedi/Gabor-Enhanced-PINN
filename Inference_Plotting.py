@@ -144,7 +144,7 @@ def model_prediction(model_path,x_in):
     u_real = prediction[:, 0]  # Real part
     # Reshape wavefields into 2D grids
     u_real_grid = tf.reshape(u_real, (npts_z_val, npts_x_val)).numpy()
-    u_imag = prediction[:, 0]  # imag part
+    u_imag = prediction[:, 1]  # imag part
     # Reshape wavefields into 2D grids
     u_imag_grid = tf.reshape(u_imag, (npts_z_val, npts_x_val)).numpy()
     return u_real_grid,u_imag_grid
@@ -156,7 +156,7 @@ u_real_grid = tf.reshape(dU_2d[:,0], (npts_z_val, npts_x_val)).numpy()
 u_imag_grid = tf.reshape(dU_2d[:,1], (npts_z_val, npts_x_val)).numpy()
 
 #Velocity model
-plt.figure(figsize=fig_siz)
+plt.figure(figsize=[fig_siz[0]/2,fig_siz[1]])
 plt.imshow(tf.reshape(v_val, (npts_z_val, npts_x_val)), extent=[a_x, b_x, b_z, a_z], origin="upper", cmap="viridis", aspect="auto")
 plt.title("Velocity model")
 plt.ylabel("$z$ (km)")
@@ -168,8 +168,6 @@ plt.show()
 
 #Loaded Finite_difference simulation
 plt.figure(figsize=fig_siz)
-
-# Add figure-wide title
 plt.suptitle("FD simulation", fontsize=21, y=.98)
 
 plt.subplot(1, 2, 1)
@@ -197,10 +195,7 @@ plt.show()
 #Model prediction:
 u_real_prediction,u_imag_prediction=model_prediction(model_path,xz_val)
 
-#Loaded Finite_difference simulation
 plt.figure(figsize=fig_siz)
-
-# Add figure-wide title
 plt.suptitle(f"{model_type} Prediction", fontsize=21, y=.98)
 
 plt.subplot(1, 2, 1)
