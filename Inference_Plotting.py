@@ -4,7 +4,7 @@
 Created on Tue May 20 16:55:06 2025
 
 @author: mabedi
-This code loads the validation data and Pre-trained models and plots:
+This code loaded the validation data and Pre-trained models and plots:
     1. Velocity mode, 2. Real part of the Finite-difference simulation, 3. Real part of the Pretrained Model's prediction
 """
 
@@ -25,10 +25,10 @@ tf.keras.backend.set_floatx(dtype)
 frequency =10        # Frequency in Hz 
 epoch=100000
 model_type='Gabor'#'PINN','Gabor'
-velocity_model='overthrust'#'simple','overthrust','marmousi'
+velocity_model='simple'#'simple','overthrust','marmousi'
 use_PML=True
 
-PML = "PML" if use_PML else "NOPML"
+PML = "NOPML" if use_PML else "NOPML"
 epoch = 99999 if epoch == 100000 else epoch
     
 model_path = f"PreTrained_Models/{velocity_model}_{model_type}_{frequency}_{PML}/u_model_epoch_{epoch}.keras"
@@ -36,12 +36,12 @@ model_path = f"PreTrained_Models/{velocity_model}_{model_type}_{frequency}_{PML}
 
 # Define the number of collocation points per epoch
 if velocity_model=='overthrust':
-    fig_siz=[7.5,4]
+    fig_siz=[15,4]
     if frequency==10:
         npts_x_val = 500 # Number of points along x-axis 501,201
         npts_z_val = 160  # Number of points along z-axis 161, 201
 elif velocity_model=='simple':
-    fig_siz=[5,4]
+    fig_siz=[10,4]
     if frequency==4:
         npts_x_val = 100 # Number of points along x-axis 71 in Gabor paper
         npts_z_val = 100  # Number of points along z-axis 71
@@ -52,7 +52,7 @@ elif velocity_model=='simple':
         npts_x_val = 200 # Number of points along x-axis  301
         npts_z_val = 200  # Number of points along z-axis 
 elif velocity_model=='marmousi':
-    fig_siz=[6,4]
+    fig_siz=[12,4]
     if frequency==10:
         npts_x_val = 150 # Number of points along x-axis = 151
         npts_z_val = 100  # Number of points along z-axis 101
@@ -104,7 +104,7 @@ plt.rcParams.update({
     "text.latex.preamble": r"\usepackage{amsmath}"  # Use amsmath for better LaTeX rendering
 })
 
-# # # ###### OLD!!! COMMENT if trained using Gabor_enhanced_PINN.py and NOT using the models in the PreTrained_Models folder
+# # # ###### OLD!!! COMMENT if trained using the not using Gabor_enhanced_PINN.py and NOT the models in the PreTrained_Models folder
 class EmbedderLayer(tf.keras.layers.Layer):#The old embedder
     def __init__(self, domain_bounds, **kwargs):
         super(EmbedderLayer, self).__init__(**kwargs)
@@ -144,7 +144,10 @@ def model_prediction(model_path,x_in):
     u_real = prediction[:, 0]  # Real part
     # Reshape wavefields into 2D grids
     u_real_grid = tf.reshape(u_real, (npts_z_val, npts_x_val)).numpy()
-    return u_real_grid
+    u_imag = prediction[:, 0]  # imag part
+    # Reshape wavefields into 2D grids
+    u_imag_grid = tf.reshape(u_imag, (npts_z_val, npts_x_val)).numpy()
+    return u_real_grid,u_imag_grid
 
 
 #%% plottings
@@ -165,24 +168,58 @@ plt.show()
 
 #Loaded Finite_difference simulation
 plt.figure(figsize=fig_siz)
-plt.imshow(u_real_grid, extent=[a_x, b_x, b_z, a_z], origin="upper", cmap="seismic", aspect="auto",interpolation='none')
+
+# Add figure-wide title
+plt.suptitle("FD simulation", fontsize=21, y=.98)
+
+plt.subplot(1, 2, 1)
+plt.imshow(u_real_grid, extent=[a_x, b_x, b_z, a_z], origin="upper",
+           cmap="seismic", aspect="auto", interpolation='none')
 plt.clim(c_lims)
-plt.title("FD simulation")
+plt.title("Real part")
 plt.ylabel("$z$ (km)")
 plt.xlabel("$x$ (km)")
 plt.colorbar()
-plt.tight_layout()  
+
+plt.subplot(1, 2, 2)
+plt.imshow(u_imag_grid, extent=[a_x, b_x, b_z, a_z], origin="upper",
+           cmap="seismic", aspect="auto", interpolation='none')
+plt.clim(c_lims)
+plt.title("Imaginary part")
+plt.ylabel("$z$ (km)")
+plt.xlabel("$x$ (km)")
+plt.colorbar()
+
+plt.tight_layout()
 plt.show()
 
+
 #Model prediction:
-u_real_simple_500=model_prediction(model_path,xz_val)
-# Plot real part
+u_real_prediction,u_imag_prediction=model_prediction(model_path,xz_val)
+
+#Loaded Finite_difference simulation
 plt.figure(figsize=fig_siz)
-plt.imshow(u_real_simple_500, extent=[a_x, b_x, b_z, a_z], origin="upper", cmap="seismic", aspect="auto",interpolation='none')
+
+# Add figure-wide title
+plt.suptitle(f"{model_type} Prediction", fontsize=21, y=.98)
+
+plt.subplot(1, 2, 1)
+plt.imshow(u_real_prediction, extent=[a_x, b_x, b_z, a_z], origin="upper",
+           cmap="seismic", aspect="auto", interpolation='none')
 plt.clim(c_lims)
-plt.title(f"{model_type} Prediction")
+plt.title("Real part")
 plt.ylabel("$z$ (km)")
 plt.xlabel("$x$ (km)")
 plt.colorbar()
-plt.tight_layout()  
+
+plt.subplot(1, 2, 2)
+plt.imshow(u_imag_prediction, extent=[a_x, b_x, b_z, a_z], origin="upper",
+           cmap="seismic", aspect="auto", interpolation='none')
+plt.clim(c_lims)
+plt.title("Imaginary part")
+plt.ylabel("$z$ (km)")
+plt.xlabel("$x$ (km)")
+plt.colorbar()
+
+plt.tight_layout()
 plt.show()
